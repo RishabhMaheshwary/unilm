@@ -34,7 +34,7 @@ class XFUN(datasets.GeneratorBasedBuilder):
 
     BUILDER_CONFIGS = [XFUNConfig(name=f"xfun.{lang}", lang=lang) for lang in _LANG]
 
-    tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlmv2-base-uncased")
 
     def _info(self):
         return datasets.DatasetInfo(
@@ -64,6 +64,8 @@ class XFUN(datasets.GeneratorBasedBuilder):
                             "end_index": datasets.Value("int64"),
                         }
                     ),
+                    "image_path": datasets.Value("string"),
+                    "annotations": datasets.Value("string")
                 }
             ),
             supervised_keys=None,
@@ -76,7 +78,10 @@ class XFUN(datasets.GeneratorBasedBuilder):
             "val": [f"{_URL}{self.config.lang}.val.json", f"{_URL}{self.config.lang}.val.zip"],
             # "test": [f"{_URL}{self.config.lang}.test.json", f"{_URL}{self.config.lang}.test.zip"],
         }
-        downloaded_files = dl_manager.download_and_extract(urls_to_download)
+        #downloaded_files = dl_manager.download_and_extract(urls_to_download)
+        downloaded_files = {'train': ['/home/rishabh.maheshwary/.cache/huggingface/datasets/downloads/funsd_train', '/home/rishabh.maheshwary/.cache/huggingface/datasets/downloads/extracted/train_images_funsd'], \
+        'val': ['/home/rishabh.maheshwary/.cache/huggingface/datasets/downloads/funsd_test', '/home/rishabh.maheshwary/.cache/huggingface/datasets/downloads/extracted/test_images_funsd']}
+        #breakpoint()
         train_files_for_many_langs = [downloaded_files["train"]]
         val_files_for_many_langs = [downloaded_files["val"]]
         # test_files_for_many_langs = [downloaded_files["test"]]
@@ -138,12 +143,13 @@ class XFUN(datasets.GeneratorBasedBuilder):
                             continue
                         text_length += offset[1] - offset[0]
                         tmp_box = []
-                        while ocr_length < text_length:
-                            ocr_word = line["words"].pop(0)
-                            ocr_length += len(
-                                self.tokenizer._tokenizer.normalizer.normalize_str(ocr_word["text"].strip())
-                            )
-                            tmp_box.append(simplify_bbox(ocr_word["box"]))
+                        if len(line["words"]) > 0:
+                            while ocr_length < text_length:
+                                ocr_word = line["words"].pop(0)
+                                ocr_length += len(
+                                    self.tokenizer._tokenizer.normalizer.normalize_str(ocr_word["text"].strip())
+                                )
+                                tmp_box.append(simplify_bbox(ocr_word["box"]))
                         if len(tmp_box) == 0:
                             tmp_box = last_box
                         bbox.append(normalize_bbox(merge_bbox(tmp_box), size))
@@ -240,6 +246,8 @@ class XFUN(datasets.GeneratorBasedBuilder):
                             "image": image,
                             "entities": entities_in_this_span,
                             "relations": relations_in_this_span,
+                            "image_path": doc["img"]["fpath"],
+                            "annotations": json.dumps(doc["document"])
                         }
                     )
                     yield f"{doc['id']}_{chunk_id}", item

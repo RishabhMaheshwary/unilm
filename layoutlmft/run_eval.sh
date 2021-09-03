@@ -1,0 +1,16 @@
+python -m torch.distributed.launch examples/run_funsd.py \
+        --model_name_or_path microsoft/layoutlm-base-uncased \
+        --output_dir resultsv2 \
+        --do_predict \
+        --max_steps 500 \
+        --warmup_ratio 0.1 \
+        --evaluation_strategy "steps" \
+        --logging_strategy "steps" \
+        --save_strategy "steps" \
+        --eval_steps 500 \
+        --save_steps 500 \
+        --logging_steps 1 \
+		--per_device_train_batch_size=8 \
+		--per_device_eval_batch_size=8 \
+		--config_name layoutlm_config.json \
+        --num_train_epochs 5

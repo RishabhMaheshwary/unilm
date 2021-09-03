@@ -3,6 +3,22 @@ import torch
 from detectron2.data.detection_utils import read_image
 from detectron2.data.transforms import ResizeTransform, TransformList
 
+def normalize_bboxes_docvqa(bboxes, width, height):
+  norm_bboxes = []
+  for box in bboxes:
+    x1,y1,x2,y2,x3,y3,x4,y4 = box
+    new_x1 = min([x1,x2,x3,x4])
+    new_x2 = max([x1,x2,x3,x4])
+    new_y1 = min([y1,y2,y3,y4])
+    new_y2 = max([y1,y2,y3,y4])
+    assert new_x2 >= new_x1
+    assert new_y2 >= new_y1
+    new_x1 = int(1000 * (new_x1 / width))
+    new_x2 = int(1000 * (new_x2 / width))
+    new_y1 = int(1000 * (new_y1 / height))
+    new_y2 = int(1000 * (new_y2 / height))
+    norm_bboxes.append([new_x1,new_y1,new_x2,new_y2])
+  return norm_bboxes[0]
 
 def normalize_bbox(bbox, size):
     return [

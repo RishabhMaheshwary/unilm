@@ -1,6 +1,8 @@
 import collections
 import time
+import json
 from typing import Any, Dict, List, Optional, Tuple, Union
+from PIL import Image, ImageDraw
 
 import torch
 from packaging import version
@@ -91,14 +93,20 @@ class XfunReTrainer(FunsdTrainer):
         re_labels = None
         pred_relations = None
         entities = None
+        annotations = []
+        image_paths = []
+        all_inputs = []
         for step, inputs in enumerate(dataloader):
+            #breakpoint()
+            all_inputs.append(inputs)
             outputs, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             re_labels = labels[1] if re_labels is None else re_labels + labels[1]
             pred_relations = (
                 outputs.pred_relations if pred_relations is None else pred_relations + outputs.pred_relations
             )
             entities = outputs.entities if entities is None else entities + outputs.entities
-
+            image_paths.append(dataloader.dataset["image_path"][step])
+            annotations.append(dataloader.dataset["annotations"][step])
             self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
 
         gt_relations = []
@@ -119,6 +127,47 @@ class XfunReTrainer(FunsdTrainer):
                 rel_sent.append(rel)
 
             gt_relations.append(rel_sent)
+        breakpoint()
+
+        for i in range(len(gt_relations)):
+            img_file = image_paths[i]
+            annotation = annotations[i]
+            json_data = json.loads(annotation)
+            id_to_box = {}
+            image = Image.open(img_file)
+            image = image.convert("RGB")
+            draw = ImageDraw.Draw(image)
+            for box in json_data:
+                id_to_box[box["id"]] = box
+            for relation in gt_relations[i]:
+               head_box = id_to_box[relation["head_id"]]["box"]
+               tail_box = id_to_box[relation["tail_id"]]["box"]
+               draw.rectangle(head_box, outline="green", width=2)
+               draw.rectangle(tail_box, outline="green", width=2)
+               draw.line([(head_box[2],head_box[1]),(tail_box[0],tail_box[1])], fill="red", width=1)
+            #image.save("relations_pred/pred_"+str(i)+".png")
+
+               #draw.line([(head_box[2],head_box[1]),(tail_box[0],tail_box[1])], fill="red", width=1)
+
+            image.save("relations_gt/gt_"+str(i)+".png")
+
+        for i in range(len(pred_relations)):
+            img_file = image_paths[i]
+            annotation = annotations[i]
+            json_data = json.loads(annotation)
+            id_to_box = {}
+            image = Image.open(img_file)
+            image = image.convert("RGB")
+            draw = ImageDraw.Draw(image)
+            for box in json_data:
+                id_to_box[box["id"]] = box
+            for relation in pred_relations[i]:
+               head_box = id_to_box[relation["head_id"]]["box"]
+               tail_box = id_to_box[relation["tail_id"]]["box"]
+               draw.rectangle(head_box, outline="green", width=2)
+               draw.rectangle(tail_box, outline="green", width=2)
+               draw.line([(head_box[2],head_box[1]),(tail_box[0],tail_box[1])], fill="red", width=1)
+            image.save("relations_pred/pred_"+str(i)+".png")
 
         re_metrics = self.compute_metrics(EvalPrediction(predictions=pred_relations, label_ids=gt_relations))
 

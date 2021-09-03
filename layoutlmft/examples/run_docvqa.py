@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from detectron2.structures import ImageList
 from matplotlib.colors import ListedColormap
-import layoutlmft.data.datasets.funsd
+import layoutlmft.data.datasets.docvqa
 import transformers
 from layoutlmft import AutoModelForRelationExtraction
 from layoutlmft import AutoModelForTokenClassification
@@ -103,7 +103,7 @@ def plot_boxes(inputs, predictions, attentions, test_set, tokenizer, label_list,
             #attn_path = str(dir)+"/attn_images/"+str(sample_idx)+"_"+str(i)+".png"
             #image1.save(attn_path)
             if final_true_labels[i] == final_predicted_labels[i]:
-                draw.rectangle([final_boxes[i][0]-100,final_boxes[i][1], final_boxes[i][2]-100, final_boxes[i][3]], outline='green', width=3)
+                draw.rectangle(final_boxes[i], outline='green', width=3)
             else:
                 orig_label = label_list[final_true_labels[i]]
                 pred_label = label_list[final_predicted_labels[i]]
@@ -117,7 +117,7 @@ def plot_boxes(inputs, predictions, attentions, test_set, tokenizer, label_list,
                     text_mark1 = "F"
                 #draw.text((final_boxes[i][0], final_boxes[i][1]-15), text_mark, fill="black", font=fnt)
                 #draw.text((final_boxes[i][2], final_boxes[i][1]-15), text_mark1, fill="black", font=fnt)
-                draw.rectangle([final_boxes[i][0]-100,final_boxes[i][1], final_boxes[i][2]-100, final_boxes[i][3]], outline='red', width=3)
+                draw.rectangle([final_boxes[i][0]-10,final_boxes[i][1], final_boxes[i][2]-10, final_boxes[i][3]], outline='red', width=3)
 
         boxes_path = str(dir)+"/images/"+str(sample_idx)+".png"
         image.save(boxes_path)
@@ -242,8 +242,8 @@ def main():
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
-
-    datasets = load_dataset(os.path.abspath(layoutlmft.data.datasets.funsd.__file__))
+    print("===========Now Load Dataset==================")
+    datasets = load_dataset(os.path.abspath(layoutlmft.data.datasets.docvqa.__file__))
 
     if training_args.do_train:
         column_names = datasets["train"].column_names
@@ -320,8 +320,9 @@ def main():
 
     # Tokenize all texts and align the labels with them.
     def tokenize_and_align_labels(examples):
-        #breakpoint()
+        print("==========Tokenization==========")
         tokenized_inputs = tokenizer(
+            examples["question"],
             examples[text_column_name],
             padding=padding,
             truncation=True,
@@ -341,14 +342,22 @@ def main():
 
             label = examples[label_column_name][org_batch_index]
             bbox = examples["bboxes"][org_batch_index]
-            #bbox = torch.clamp(bbox, min=0, max=1000)
             image = examples["image"][org_batch_index]
             previous_word_idx = None
             label_ids = []
             bbox_inputs = []
+            seen_sep, cntr = 0, 0
             for word_idx in word_ids:
                 # Special tokens have a word id that is None. We set the label to -100 so they are automatically
                 # ignored in the loss function.
+                if seen_sep == 0:
+                    if cntr > 0 and word_idx is None:
+                        seen_sep = 1
+                    cntr+=1
+                    label_ids.append(-100)
+                    bbox_inputs.append([0, 0, 0, 0])
+                    continue
+
                 if word_idx is None:
                     label_ids.append(-100)
                     bbox_inputs.append([0, 0, 0, 0])
@@ -362,6 +371,7 @@ def main():
                     label_ids.append(label_to_id[label[word_idx]] if data_args.label_all_tokens else -100)
                     bbox_inputs.append(bbox[word_idx])
                 previous_word_idx = word_idx
+
             labels.append(label_ids)
             bboxes.append(bbox_inputs)
             images.append(image)
@@ -370,7 +380,6 @@ def main():
         tokenized_inputs["bbox"] = bboxes
         tokenized_inputs["image"] = images
         tokenized_inputs["image_paths"] = img_paths
-        #breakpoint()
         return tokenized_inputs
 
     if training_args.do_train:
@@ -462,7 +471,7 @@ def main():
             }
 
     # Initialize our Trainer
-    #breakpoint()
+    breakpoint()
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -505,7 +514,7 @@ def main():
     if training_args.do_predict:
         logger.info("*** Predict ***")
         breakpoint()
-        predictions, labels, metrics, attns = trainer.predict(test_dataset)
+        predictions, labels, metrics, hidden_states = trainer.predict(test_dataset)
         cur_preds = predictions
         breakpoint()
         predictions = np.argmax(predictions, axis=2)

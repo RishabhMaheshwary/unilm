@@ -11,6 +11,9 @@ class FunsdTrainer(Trainer):
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
         """
+        #breakpoint()
+        inputs["bbox"] = torch.clamp(inputs["bbox"], min=0, max=1000)
+        #inputs["input_ids"] = torch.clamp(inputs["input_ids"], min=0, max=30000)
         for k, v in inputs.items():
             if hasattr(v, "to") and hasattr(v, "device"):
                 inputs[k] = v.to(self.args.device)
