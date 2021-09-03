@@ -346,19 +346,19 @@ def main():
             previous_word_idx = None
             label_ids = []
             bbox_inputs = []
-            seen_sep, cntr = 0, 0
+            cur_cnt, cntr = 0, 0
+            for word_idx in word_ids:
+                if word_idx is None and cntr > 0:
+                    break
+                cntr+=1
             for word_idx in word_ids:
                 # Special tokens have a word id that is None. We set the label to -100 so they are automatically
                 # ignored in the loss function.
-                if seen_sep == 0:
-                    if cntr > 0 and word_idx is None:
-                        seen_sep = 1
-                    cntr+=1
+                if cur_cnt < cntr:
                     label_ids.append(-100)
                     bbox_inputs.append([0, 0, 0, 0])
-                    continue
 
-                if word_idx is None:
+                elif word_idx is None:
                     label_ids.append(-100)
                     bbox_inputs.append([0, 0, 0, 0])
                 # We set the label for the first token of each word.
@@ -368,10 +368,12 @@ def main():
                 # For the other tokens in a word, we set the label to either the current label or -100, depending on
                 # the label_all_tokens flag.
                 else:
+                    #print(len(label), word_idx)
+                    #label_ids.append(-100)
                     label_ids.append(label_to_id[label[word_idx]] if data_args.label_all_tokens else -100)
                     bbox_inputs.append(bbox[word_idx])
                 previous_word_idx = word_idx
-
+                cur_cnt+=1
             labels.append(label_ids)
             bboxes.append(bbox_inputs)
             images.append(image)
@@ -427,6 +429,7 @@ def main():
         #breakpoint()
 
     # Data collator
+    print("================Done=============")
     data_collator = DataCollatorForKeyValueExtraction(
         tokenizer,
         pad_to_multiple_of=8 if training_args.fp16 else None,
@@ -471,7 +474,7 @@ def main():
             }
 
     # Initialize our Trainer
-    breakpoint()
+    #breakpoint()
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -502,21 +505,21 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        #metrics = trainer.evaluate()
+        metrics = trainer.evaluate()
 
-        #max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
-        #metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
-        #trainer.log_metrics("eval", metrics)
-        #trainer.save_metrics("eval", metrics)
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
     # Predict
     if training_args.do_predict:
         logger.info("*** Predict ***")
-        breakpoint()
+        #breakpoint()
         predictions, labels, metrics, hidden_states = trainer.predict(test_dataset)
         cur_preds = predictions
-        breakpoint()
+        #breakpoint()
         predictions = np.argmax(predictions, axis=2)
         trainer.log_metrics("test", metrics)
         # Remove ignored index (special tokens)

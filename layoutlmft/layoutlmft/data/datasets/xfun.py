@@ -152,7 +152,8 @@ class XFUN(datasets.GeneratorBasedBuilder):
                                 tmp_box.append(simplify_bbox(ocr_word["box"]))
                         if len(tmp_box) == 0:
                             tmp_box = last_box
-                        bbox.append(normalize_bbox(merge_bbox(tmp_box), size))
+                        bbox.append(merge_bbox(tmp_box))
+                        #bbox.append(normalize_bbox(merge_bbox(tmp_box), size))
                         last_box = tmp_box
                     bbox = [
                         [bbox[i + 1][0], bbox[i + 1][1], bbox[i + 1][0], bbox[i + 1][1]] if b is None else b

@@ -1,6 +1,6 @@
 python -m torch.distributed.launch  examples/run_docvqa.py \
-        --model_name_or_path microsoft/layoutlm-base-uncased \
-        --output_dir results_docvqa \
+        --model_name_or_path microsoft/layoutlmv2-base-uncased \
+        --output_dir results_docvqav2 \
         --do_train \
         --do_eval \
         --do_predict \
@@ -15,6 +15,6 @@ python -m torch.distributed.launch  examples/run_docvqa.py \
         --per_device_train_batch_size=8 \
         --per_device_eval_batch_size=8 \
         --num_train_epochs 5 \
-        --config_name layoutlm_config.json \
+        --config_name layoutlmv2_config.json \
         --report_to tensorboard \
         --return_entity_level_metrics
