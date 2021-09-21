@@ -26,7 +26,7 @@ from ...modules.decoders.re import REDecoder
 from ...utils import ReOutput
 from .configuration_layoutlmv2 import LayoutLMv2Config
 from .detectron2_config import add_layoutlmv2_config
-
+#from .loss import FocalLoss
 
 logger = logging.get_logger(__name__)
 
@@ -39,6 +39,24 @@ LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LayoutLMv2LayerNorm = torch.nn.LayerNorm
 
 
+class FocalLoss(nn.Module):
+    
+    def __init__(self, weight=None,
+                 gamma=5., reduction='none'):
+        nn.Module.__init__(self)
+        self.weight = weight
+        self.gamma = gamma
+        self.reduction = reduction
+        
+    def forward(self, input_tensor, target_tensor):
+        log_prob = F.log_softmax(input_tensor, dim=-1)
+        prob = torch.exp(log_prob)
+        return F.nll_loss(
+            ((1 - prob) ** self.gamma) * log_prob, 
+            target_tensor, 
+            weight=self.weight,
+            reduction = self.reduction
+        )
 class LayoutLMv2Embeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -870,13 +888,19 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
+            #loss_fct = CrossEntropyLoss()
+            class_weight = [0.3, 0.7]
+            wt = torch.FloatTensor(class_weight).cuda()
+            #loss_fct = CrossEntropyLoss(weight = wt)
+            loss_fct = FocalLoss(reduction="mean", gamma = 3., weight=wt)
 
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
                 active_logits = logits.view(-1, self.num_labels)[active_loss]
                 active_labels = labels.view(-1)[active_loss]
+                #breakpoint()
                 loss = loss_fct(active_logits, active_labels)
+                #breakpoint()
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
