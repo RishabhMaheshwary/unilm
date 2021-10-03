@@ -40,7 +40,7 @@ class Docvqa(datasets.GeneratorBasedBuilder):
                     "bboxes": datasets.Sequence(datasets.Sequence(datasets.Value("int64"))),
                     "ner_tags": datasets.Sequence(
                         datasets.features.ClassLabel(
-                            names=["OTHER", "ANSWER"]
+                            names=["OTHER", "B-ANSWER", "I-ANSWER"]
                         )
                     ),
                     "image": datasets.Array3D(shape=(3, 224, 224), dtype="uint8"),
@@ -54,18 +54,18 @@ class Docvqa(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        downloaded_file = "/scratch/layoutlm/DocVQA"
+        downloaded_file = "/scratch/DocVQA"
         #downloaded_file = "/home/rishabh.maheshwary/.cache/huggingface/datasets/downloads/extracted/f685dfeb0c20c80cff4f0c036a409562f9935ad59f7215248630987debe06560"
         #downloaded_file = dl_manager.download_and_extract("https://guillaumejaume.github.io/FUNSD/dataset.zip")
         return [
             datasets.SplitGenerator(
-                name=datasets.Split.TRAIN, gen_kwargs={"filepath": f"{downloaded_file}/dataset/training_data/", "split": "train"}
+                name=datasets.Split.TRAIN, gen_kwargs={"filepath": f"{downloaded_file}/data/docvqa/train/", "split": "train"}
             ),
             datasets.SplitGenerator(
-                name=datasets.Split.VALIDATION, gen_kwargs={"filepath": f"{downloaded_file}/dataset/testing_data/", "split": "val"}
+                name=datasets.Split.VALIDATION, gen_kwargs={"filepath": f"{downloaded_file}/data/docvqa/val/", "split": "val"}
             ),
             datasets.SplitGenerator(
-                name=datasets.Split.TEST, gen_kwargs={"filepath": f"{downloaded_file}/dataset/testing_data/", "split": "val"}
+                name=datasets.Split.TEST, gen_kwargs={"filepath": f"{downloaded_file}/data/docvqa/val/", "split": "val"}
             )
         ]
 
@@ -88,7 +88,9 @@ class Docvqa(datasets.GeneratorBasedBuilder):
             answers = data[i]["answers"]
             all_answers = []
             for ans in answers:
-                all_answers.append(ans.lower())
+                ans_lower = ans.lower()
+                ans_list = ans_lower.split(" ")
+                all_answers.append(ans_list)
             image_file = data[i]["image"]
             image_name = image_file[image_file.find("/")+1:]
             img_path = os.path.join(filepath, image_file)
@@ -101,20 +103,59 @@ class Docvqa(datasets.GeneratorBasedBuilder):
             ocr_data = json.load(ocr_f)
             ocr_data = ocr_data["recognitionResults"][0]
             lines = ocr_data["lines"]
+            min_len_ans = 1000000
+            max_len_ans = 0
             for line in lines:
                 bbox = line["boundingBox"]
                 text = line["text"]
                 words = line["words"]
                 new_words = []
+                answer_flag = 0
                 for word in words:
                     word_bbox = word["boundingBox"]
                     word_text = word["text"]
                     tokens.append(word_text.lower())
                     #bboxes.append(word_bbox)
+                    found = 0
                     bboxes.append(normalize_bboxes_docvqa([word_bbox], size[0], size[1]))
-                    if word_text.lower() in all_answers:
-                        qa_tags.append("ANSWER")
-                    else:
+                    for ans_list in all_answers:
+                        min_len_ans = min(min_len_ans,len(ans_list))
+                        max_len_ans = max(max_len_ans,len(ans_list))
+                        if word_text.lower() in ans_list:
+                            if answer_flag == 0:
+                                qa_tags.append("B-ANSWER")
+                                found+=1
+                                answer_flag+=1
+                            else:
+                                qa_tags.append("I-ANSWER")
+                                found+=1
+                                answer_flag+=1
+                            break
+                    if found == 0:
                         qa_tags.append("OTHER")
+            end_idx = 0
+            start_idx = 0
+            cur_cnt=0
+            min_cnt = -1
+            start_end = []
+            assert len(qa_tags) == len(tokens)
+
+            for i in range(len(tokens)):
+
+                if qa_tags[i] == "B-ANSWER" or qa_tags[i] == "I-ANSWER":
+                    cur_cnt+=1
+                else:
+                    if cur_cnt > min_cnt:
+                       end_idx = i - 1
+                       start_idx = i - cur_cnt
+                       min_cnt = cur_cnt
+
+                    cur_cnt=0
+
+            for i in range(len(qa_tags)):
+                if i>=start_idx and i<=end_idx:
+                    continue
+                else:
+                    qa_tags[i] = "OTHER"
 
             yield i, {"id": str(i), "question": question.split(" "), "tokens": tokens, "bboxes": bboxes, "ner_tags": qa_tags, "image": image, "image_path": img_path}

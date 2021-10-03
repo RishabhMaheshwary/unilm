@@ -1,9 +1,8 @@
-python -m torch.distributed.launch  examples/run_docvqa.py \
+python -m torch.distributed.launch examples/run_docvqa.py \
         --model_name_or_path microsoft/layoutlmv2-base-uncased \
         --output_dir results_docvqav2 \
         --do_train \
         --do_eval \
-        --do_predict \
         --max_steps 50000 \
         --warmup_ratio 0.1 \
         --evaluation_strategy "steps" \
@@ -12,8 +11,8 @@ python -m torch.distributed.launch  examples/run_docvqa.py \
         --eval_steps 5000 \
         --save_steps 10000 \
         --logging_steps 1 \
-        --per_device_train_batch_size=8 \
-        --per_device_eval_batch_size=8 \
+        --per_device_train_batch_size=2 \
+        --per_device_eval_batch_size=1 \
         --num_train_epochs 5 \
         --config_name layoutlmv2_config.json \
         --report_to tensorboard \

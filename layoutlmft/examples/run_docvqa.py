@@ -35,6 +35,9 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from similarity.normalized_levenshtein import \
+    NormalizedLevenshtein
+
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
 from pathlib import Path
@@ -43,6 +46,8 @@ from pathlib import Path
 check_min_version("4.5.0")
 
 logger = logging.getLogger(__name__)
+
+EditDistance = NormalizedLevenshtein()
 
 def plot_boxes(inputs, predictions, attentions, test_set, tokenizer, label_list, dir):
     #breakpoint()
@@ -336,6 +341,8 @@ def main():
         images = []
         img_paths = []
         data_args.label_all_tokens = True
+        print(len(tokenized_inputs["input_ids"]))
+        cnn = 0
         for batch_index in range(len(tokenized_inputs["input_ids"])):
             word_ids = tokenized_inputs.word_ids(batch_index=batch_index)
             org_batch_index = tokenized_inputs["overflow_to_sample_mapping"][batch_index]
@@ -374,6 +381,8 @@ def main():
                     bbox_inputs.append(bbox[word_idx])
                 previous_word_idx = word_idx
                 cur_cnt+=1
+            cnn+=1
+            print(cnn,end =" ")
             labels.append(label_ids)
             bboxes.append(bbox_inputs)
             images.append(image)
@@ -453,7 +462,7 @@ def main():
             [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
             for prediction, label in zip(predictions, labels)
         ]
-
+        #breakpoint()
         results = metric.compute(predictions=true_predictions, references=true_labels)
         if data_args.return_entity_level_metrics:
             # Unpack nested dictionaries
@@ -505,13 +514,83 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        metrics = trainer.evaluate()
+        predictions, labels, metrics = trainer.predict(eval_dataset)
+        predictions = np.argmax(predictions, axis=2)
+        final_indices, true_labels, pred_labels = [], [], []
+        #breakpoint()
+        exs = eval_dataset["input_ids"]
+        anls_score = []
+        for i in range(len(predictions)):
 
-        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
-        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+            cur_idx = 0
+            cur_indices, cur_labels, cur_pred_labels = [], [], []
+            toks = exs[i]
+            gt_answer, pred_answer = [], []
 
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
+            for j in range(512):
+                cur_token = toks[j]
+                if int(labels[i][j]) != -100:
+                    #if int(labels[i][j]) != 0:
+                    #cur_indices.append(cur_idx)
+                    if int(labels[i][j]) >=1:
+                        gt_answer.append(tokenizer.decode([cur_token]))
+                    if int(predictions[i][j]) >=1:
+                        pred_answer.append(tokenizer.decode([cur_token]))
+
+            final_pred_string = []
+            for tok in pred_answer:
+                if len(tok) > 2 and tok[0:2] == "##":
+                    if len(final_pred_string) == 0:
+                        final_pred_string.append(tok[2:])
+                        continue
+                    final_pred_string[-1] = final_pred_string[-1]+tok[2:]
+                else:
+                    final_pred_string.append(tok)
+
+            final_gt_string = []
+
+            for tok in gt_answer:
+                if len(tok) > 2 and tok[0:2] == "##":
+                    final_gt_string[-1] = final_gt_string[-1]+tok[2:]
+                else:
+                    final_gt_string.append(tok)
+
+            sim_score = EditDistance.similarity(" ".join(final_pred_string), " ".join(final_gt_string))
+            if sim_score < 0.5:
+                sim_score = 0
+            print(final_gt_string, final_pred_string, sim_score)
+            anls_score.append(sim_score)
+                    #cur_labels.append(int(labels[i][j]))
+                    #cur_pred_labels.append(int(predictions[i][j]))
+                    #cur_idx+=1
+            #final_indices.append(cur_indices)
+            #true_labels.append(cur_labels)
+            #pred_labels.append(cur_pred_labels)
+        print("Done")
+        print(np.mean(anls_score))
+        #for i in range(len(predictions)):
+        #    doc_tokens = tokenizer.decode(exs[i])
+        #    breakpoint()
+            #assert len(doc_tokens) == len(final_indices[i])
+        #    for j in range(len(doc_tokens)):
+        #        if true_labels[i][j] >= 1:
+        #            gt_answer.append(doc_tokens[i][j])
+        #        if pred_labels[i][j] >= 1:
+        #            pred_answer.append(doc_tokens[i][j])
+        #    sim_score = EditDistance.similarity(" ".join(pred_answer), " ".join(gt_answer))
+        #    if sim_score < 0.5:
+        #        sim_score = 0
+        #    anls_scores.append(sim_score)
+        #    res.append(pred_answer, gt_answer)
+        #print("ANLS score: ", np.mean(anls_scores))
+        breakpoint()
+        #metrics = trainer.evaluate()
+
+        #max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        #metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+
+        #trainer.log_metrics("eval", metrics)
+        #trainer.save_metrics("eval", metrics)
 
     # Predict
     if training_args.do_predict:

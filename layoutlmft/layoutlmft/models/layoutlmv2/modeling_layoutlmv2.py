@@ -889,10 +889,10 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         loss = None
         if labels is not None:
             #loss_fct = CrossEntropyLoss()
-            class_weight = [0.3, 0.7]
+            class_weight = [0.1, 0.45, 0.45]
             wt = torch.FloatTensor(class_weight).cuda()
-            #loss_fct = CrossEntropyLoss(weight = wt)
-            loss_fct = FocalLoss(reduction="mean", gamma = 3., weight=wt)
+            loss_fct = CrossEntropyLoss(weight = wt)
+            #loss_fct = FocalLoss(reduction="mean", gamma = 3., weight=wt)
 
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
